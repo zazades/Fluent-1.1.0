@@ -248,36 +248,36 @@ function Element:New(Idx, Config)
 		end
 	end
 
+	local DROPDOWN_BUFFER = 10 -- Number of extra dropdowns to load before/after the screen view
+	local MAX_VISIBLE_DROPDOWNS = 50 -- Adjust for performance tuning
+
 	function Dropdown:BuildDropdownList()
 		local Values = Dropdown.Values
 		local Buttons = {}
+		local ActiveButtons = {}
+		local ListSizeX = 0
 
+		-- Clear previous UI elements efficiently
 		for _, Element in next, DropdownScrollFrame:GetChildren() do
 			if not Element:IsA("UIListLayout") then
-				Element:Destroy()
+				Element.Visible = false -- Hide instead of destroying
 			end
 		end
 
 		local Count = 0
 
-		for Idx, Value in next, Values do
-			task.wait()
+		-- Creates a dropdown button but doesn't add it to the UI immediately
+		local function CreateDropdownElement(Value, Index)
 			local Table = {}
-
-			Count = Count + 1
 
 			local ButtonSelector = New("Frame", {
 				Size = UDim2.fromOffset(4, 14),
 				BackgroundColor3 = Color3.fromRGB(76, 194, 255),
 				Position = UDim2.fromOffset(-1, 16),
 				AnchorPoint = Vector2.new(0, 0.5),
-				ThemeTag = {
-					BackgroundColor3 = "Accent",
-				},
+				ThemeTag = { BackgroundColor3 = "Accent" },
 			}, {
-				New("UICorner", {
-					CornerRadius = UDim.new(0, 2),
-				}),
+				New("UICorner", { CornerRadius = UDim.new(0, 2) }),
 			})
 
 			local ButtonLabel = New("TextLabel", {
@@ -292,9 +292,7 @@ function Element:New(Idx, Config)
 				Size = UDim2.fromScale(1, 1),
 				Position = UDim2.fromOffset(10, 0),
 				Name = "ButtonLabel",
-				ThemeTag = {
-					TextColor3 = "Text",
-				},
+				ThemeTag = { TextColor3 = "Text" },
 			})
 
 			local Button = New("TextButton", {
@@ -303,15 +301,12 @@ function Element:New(Idx, Config)
 				ZIndex = 23,
 				Text = "",
 				Parent = DropdownScrollFrame,
-				ThemeTag = {
-					BackgroundColor3 = "DropdownOption",
-				},
+				Visible = false, -- Start hidden
+				ThemeTag = { BackgroundColor3 = "DropdownOption" },
 			}, {
 				ButtonSelector,
 				ButtonLabel,
-				New("UICorner", {
-					CornerRadius = UDim.new(0, 6),
-				}),
+				New("UICorner", { CornerRadius = UDim.new(0, 6) }),
 			})
 
 			local Selected
@@ -391,22 +386,61 @@ function Element:New(Idx, Config)
 			Table:UpdateButton()
 			Dropdown:Display()
 
-			Buttons[Button] = Table
-		end
+			-- Update ListSizeX dynamically based on text width
+			task.spawn(function()
+				task.wait(0.01) -- Allow time for UI to update
+				if ButtonLabel.TextBounds.X > ListSizeX then
+					ListSizeX = ButtonLabel.TextBounds.X
+				end
+			end)
 
-		ListSizeX = 0
-		for Button, Table in next, Buttons do
-			if Button.ButtonLabel then
-				if Button.ButtonLabel.TextBounds.X > ListSizeX then
-					ListSizeX = Button.ButtonLabel.TextBounds.X
+			local function UpdateVisibility()
+				local ContentSize = DropdownScrollFrame.UIListLayout.AbsoluteContentSize.Y
+				local ViewStart = DropdownScrollFrame.CanvasPosition.Y
+				local ViewEnd = ViewStart + DropdownScrollFrame.AbsoluteSize.Y
+
+				local ButtonPos = Button.AbsolutePosition.Y
+				local ButtonEnd = ButtonPos + Button.AbsoluteSize.Y
+
+				-- Check if the button is inside the visible area (with buffer)
+				if ButtonPos >= ViewStart - (DROPDOWN_BUFFER * 32) and ButtonEnd <= ViewEnd + (DROPDOWN_BUFFER * 32) then
+					if not ActiveButtons[Button] then
+						ActiveButtons[Button] = true
+						Button.Visible = true
+					end
+				else
+					if ActiveButtons[Button] then
+						ActiveButtons[Button] = nil
+						Button.Visible = false
+					end
 				end
 			end
-		end
-		ListSizeX = ListSizeX + 30
 
-		RecalculateCanvasSize()
-		RecalculateListSize()
+			-- Bind scrolling event to update visibility
+			DropdownScrollFrame:GetPropertyChangedSignal("CanvasPosition"):Connect(UpdateVisibility)
+
+			UpdateVisibility() -- Run once to initialize visibility
+			return Button
+		end
+
+		-- Batch UI creation to avoid freezing
+		task.spawn(function()
+			for Idx, Value in next, Values do
+				if Idx > MAX_VISIBLE_DROPDOWNS then break end -- Only load a few at a time
+				local Button = CreateDropdownElement(Value, Idx)
+				Buttons[Button] = Button
+				task.wait(0.01) -- Slight delay to prevent lag spikes
+			end
+		end)
+
+		-- Final size adjustments
+		task.delay(0.5, function() -- Delay to allow UI updates
+			ListSizeX = ListSizeX + 30
+			RecalculateCanvasSize()
+			RecalculateListSize()
+		end)
 	end
+
 
 	function Dropdown:SetValues(NewValues)
 		if NewValues then
