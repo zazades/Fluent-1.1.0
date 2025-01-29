@@ -261,6 +261,7 @@ function Element:New(Idx, Config)
 		local Count = 0
 
 		for Idx, Value in next, Values do
+			task.wait()
 			local Table = {}
 
 			Count = Count + 1
