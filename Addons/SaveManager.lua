@@ -112,15 +112,55 @@ local SaveManager = {} do
         local success, decoded = pcall(HttpService.JSONDecode, HttpService, readfile(file))
         if not success then return false, "Decode error" end
 
-        for _, option in next, decoded.objects do
-            if self.Parser[option.type] then
-                task.spawn(function()
-                    self.Parser[option.type].Load(option.idx, option)
-                end) -- task.spawn() so the config loading won't get stuck.
+        -- Implement pagination or lazy loading for dropdown values
+        local loadedValues = decoded.objects -- Assume this contains your 1500+ CFrames
+
+        -- Define pagination variables
+        local pageSize = 50 -- Number of items per page
+        local currentPage = 1
+        local totalPages = math.ceil(#loadedValues / pageSize)
+
+        -- Function to load a specific page of values
+        local function loadPage(page)
+            local startIndex = (page - 1) * pageSize + 1
+            local endIndex = math.min(page * pageSize, #loadedValues)
+            local pageValues = {}
+
+            for i = startIndex, endIndex do
+                table.insert(pageValues, loadedValues[i].idx) -- Use whatever identifier you need for dropdown
+            end
+
+            return pageValues
+        end
+
+        -- Function to update the dropdown with the current page values
+        local function updateDropdown()
+            local pageValues = loadPage(currentPage)
+            Dropdown:SetValues(pageValues)
+        end
+
+        -- Implement next and previous page functions
+        local function nextPage()
+            if currentPage < totalPages then
+                currentPage = currentPage + 1
+                updateDropdown()
             end
         end
 
-        return true
+        local function previousPage()
+            if currentPage > 1 then
+                currentPage = currentPage - 1
+                updateDropdown()
+            end
+        end
+
+        -- Initial update
+        updateDropdown()
+
+        -- Bind pagination functions to UI elements or buttons
+        -- Assuming you have buttons or some method to trigger pagination
+        -- nextButton.MouseButton1Click:Connect(nextPage)
+        -- prevButton.MouseButton1Click:Connect(previousPage)
     end
 
     function SaveManager:IgnoreThemeSettings()
