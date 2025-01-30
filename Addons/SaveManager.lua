@@ -81,27 +81,34 @@ local SaveManager = {} do
         if not name then
             return false, "No config file is selected"
         end
-
+    
         local fullPath = self.Folder .. "/settings/" .. name .. ".json"
         local data = { objects = {} }
-
+    
+        -- Save each option based on its type
         for idx, option in next, SaveManager.Options do
             if not self.Parser[option.Type] then continue end
             if self.Ignore[idx] then continue end
-
+    
             table.insert(data.objects, self.Parser[option.Type].Save(idx, option))
         end
-
+    
+        -- Encode data to JSON
         local success, encoded = pcall(HttpService.JSONEncode, HttpService, data)
         if not success then
             return false, "Failed to encode data"
         end
-
-        writefile(fullPath, encoded)
+    
+        -- Write the encoded data to a file
+        local writeSuccess, writeError = pcall(writefile, fullPath, encoded)
+        if not writeSuccess then
+            return false, "Failed to write file: " .. writeError
+        end
+    
         return true
     end
 
-    function SaveManager:Load(name)
+   function SaveManager:Load(name)
         if not name then
             return false, "No config file is selected"
         end
@@ -111,6 +118,14 @@ local SaveManager = {} do
 
         local success, decoded = pcall(HttpService.JSONDecode, HttpService, readfile(file))
         if not success then return false, "Decode error" end
+
+        for _, option in next, decoded.objects do
+            if self.Parser[option.type] then
+                task.spawn(function()
+                    self.Parser[option.type].Load(option.idx, option)
+                end) -- task.spawn() so the config loading won't get stuck.
+            end
+        end
 
         -- Implement pagination or lazy loading for dropdown values
         local loadedValues = decoded.objects -- Assume this contains your 1500+ CFrames
@@ -136,6 +151,7 @@ local SaveManager = {} do
         -- Function to update the dropdown with the current page values
         local function updateDropdown()
             local pageValues = loadPage(currentPage)
+            -- Assuming Dropdown is your dropdown object
             Dropdown:SetValues(pageValues)
         end
 
@@ -161,6 +177,8 @@ local SaveManager = {} do
         -- Assuming you have buttons or some method to trigger pagination
         -- nextButton.MouseButton1Click:Connect(nextPage)
         -- prevButton.MouseButton1Click:Connect(previousPage)
+
+        return true
     end
 
     function SaveManager:IgnoreThemeSettings()
