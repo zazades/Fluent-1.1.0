@@ -260,6 +260,7 @@ function Element:New(Idx, Config)
 	    -- Clear previous UI elements efficiently
 	    for _, Element in next, DropdownScrollFrame:GetChildren() do
 	        if not Element:IsA("UIListLayout") then
+		    task.wait()
 	            Element:Destroy() -- Destroy instead of hiding to free memory
 	        end
 	    end
@@ -353,6 +354,7 @@ function Element:New(Idx, Config)
 	                    Dropdown.Value = Selected and Value or nil
 	
 	                    for _, OtherButton in next, Buttons do
+				task.wait()
 	                        OtherButton:UpdateButton()
 	                    end
 	                end
@@ -380,9 +382,10 @@ function Element:New(Idx, Config)
 	    -- Batch UI creation to avoid freezing
 	    local function CreateBatch(startIdx, endIdx)
 	        for Idx = startIdx, endIdx do
+		    task.wait()
 	            local Value = Values[Idx]
 	            if not Value then break end
-	
+			
 	            local Button = CreateDropdownElement(Value, Idx)
 	            Buttons[Button] = Button
 	            task.wait(0.01) -- Slight delay to prevent lag spikes
@@ -393,6 +396,7 @@ function Element:New(Idx, Config)
 	    local totalValues = #Values
 	    local batchSize = math.min(MAX_VISIBLE_DROPDOWNS, totalValues)
 	    for i = 1, totalValues, batchSize do
+		task.wait()
 	        task.spawn(CreateBatch, i, math.min(i + batchSize - 1, totalValues))
 	    end
 	
