@@ -343,15 +343,55 @@ function Element:New(Idx, Config)
 	        math.min(DropdownListLayout.AbsoluteContentSize.Y + 10, 392)
 	    )
 	end
-
+	
 	function Dropdown:SetValues(NewValues)
-		if NewValues then
-			Dropdown.Values = NewValues
-		end
-
-		Dropdown:BuildDropdownList()
+	    if NewValues then
+	        Dropdown.Values = NewValues
+	    end
+	
+	    local totalValues = #Dropdown.Values
+	    local pageSize = 50 
+	    local currentPage = 1
+	    local totalPages = math.ceil(totalValues / pageSize)
+	
+	   
+	    local function loadPage(page)
+	        local startIndex = (page - 1) * pageSize + 1
+	        local endIndex = math.min(page * pageSize, totalValues)
+	        local pageValues = {}
+	
+	        for i = startIndex, endIndex do
+	            table.insert(pageValues, Dropdown.Values[i])
+	        end
+	
+	        return pageValues
+	    end
+	
+	    
+	    local function updateDropdown()
+	        local pageValues = loadPage(currentPage)
+	        Dropdown:BuildDropdownList(pageValues)
+	    end
+	
+	  
+	    local function nextPage()
+	        if currentPage < totalPages then
+	            currentPage = currentPage + 1
+	            updateDropdown()
+	        end
+	    end
+	
+	    local function previousPage()
+	        if currentPage > 1 then
+	            currentPage = currentPage - 1
+	            updateDropdown()
+	        end
+	    end
+	
+	   
+	    updateDropdown()
+	
 	end
-
 	function Dropdown:OnChanged(Func)
 		Dropdown.Changed = Func
 		Func(Dropdown.Value)
