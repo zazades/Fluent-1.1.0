@@ -321,27 +321,56 @@ function Element:New(Idx, Config)
 	        end
 	    end
 	
-	    -- Batch create new elements
+	    -- Calculate the number of pages
 	    local totalValues = #Values
-	    local batchSize = math.min(MAX_VISIBLE_DROPDOWNS, totalValues)
-	    for i = 1, totalValues, batchSize do
-	        local endIdx = math.min(i + batchSize - 1, totalValues)
-	        for j = i, endIdx do
-	            local Value = Values[j]
-	            local Button = self:CreateDropdownElement(Value, j)
-	            Button.Name = "PooledElement"
-	            Button.LayoutOrder = j
-	            ListSizeX = math.max(ListSizeX, Button.ButtonLabel.TextBounds.X + 30)
+	    local totalPages = math.ceil(totalValues / VISIBLE_ITEM_COUNT)
+	
+	    -- Function to load a specific page of values
+	    local function loadPage(page)
+	        local startIndex = (page - 1) * VISIBLE_ITEM_COUNT + 1
+	        local endIndex = math.min(page * VISIBLE_ITEM_COUNT, totalValues)
+	        local pageValues = {}
+	
+	        for i = startIndex, endIndex do
+	            table.insert(pageValues, Values[i])
 	        end
-	        RunService.Heartbeat:Wait() -- Gentle yield
+	
+	        return pageValues
 	    end
 	
-	    -- Immediate layout calculations
-	    DropdownScrollFrame.CanvasSize = UDim2.fromOffset(0, DropdownListLayout.AbsoluteContentSize.Y)
-	    DropdownHolderCanvas.Size = UDim2.fromOffset(
-	        ListSizeX,
-	        math.min(DropdownListLayout.AbsoluteContentSize.Y + 10, 392)
-	    )
+	    -- Function to update the dropdown with the current page values
+	    local function updateDropdown(page)
+	        local pageValues = loadPage(page)
+	        for _, value in pairs(pageValues) do
+	            local Button = table.remove(elementPool, 1) or self:CreateDropdownElement(value, _)
+	            Button.Name = "PooledElement"
+	            Button.LayoutOrder = _
+	            ListSizeX = math.max(ListSizeX, Button.ButtonLabel.TextBounds.X + 30)
+	        end
+	        
+	        -- Immediate layout calculations
+	        DropdownScrollFrame.CanvasSize = UDim2.fromOffset(0, DropdownListLayout.AbsoluteContentSize.Y)
+	        DropdownHolderCanvas.Size = UDim2.fromOffset(
+	            ListSizeX,
+	            math.min(DropdownListLayout.AbsoluteContentSize.Y + 10, 392)
+	        )
+	    end
+	
+	    -- Initial update
+	    updateDropdown(1)
+	
+	    -- Handle scrolling to load more items
+	    DropdownScrollFrame:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+	        local currentOffset = DropdownScrollFrame.CanvasPosition.Y
+	        local totalHeight = DropdownScrollFrame.CanvasSize.Y.Offset
+	
+	        if currentOffset + DropdownScrollFrame.AbsoluteSize.Y >= totalHeight - 10 then
+	            local nextPage = math.ceil(currentOffset / (VISIBLE_ITEM_COUNT * 30)) + 1
+	            if nextPage <= totalPages then
+	                updateDropdown(nextPage)
+	            end
+	        end
+	    end)
 	end
 	
 	function Dropdown:SetValues(NewValues)
