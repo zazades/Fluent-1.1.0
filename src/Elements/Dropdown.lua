@@ -1,3 +1,9 @@
+local RunService = game:GetService("RunService")
+local TEXT_WIDTH_CACHE = {} 
+local MAX_VISIBLE_DROPDOWNS = 10 
+local DROPDOWN_BUFFER = 2 
+local elementPool = {} 
+
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Mouse = game:GetService("Players").LocalPlayer:GetMouse()
@@ -248,163 +254,94 @@ function Element:New(Idx, Config)
 		end
 	end
 
-	local MAX_VISIBLE_DROPDOWNS = 10 -- Adjust based on your needs
-	local DROPDOWN_BUFFER = 2 -- Number of offscreen elements to keep loaded
+	function Dropdown:CreateNewDropdownElement()
+	    local ButtonSelector = New("Frame", {
+	        Size = UDim2.fromOffset(4, 14),
+	        BackgroundColor3 = Color3.fromRGB(76, 194, 255),
+	        Position = UDim2.fromOffset(-1, 16),
+	        AnchorPoint = Vector2.new(0, 0.5),
+	        ThemeTag = { BackgroundColor3 = "Accent" },
+	    }, {
+	        New("UICorner", { CornerRadius = UDim.new(0, 2) }),
+	    })
+	
+	    local ButtonLabel = New("TextLabel", {
+	        FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
+	        Text = "",
+	        TextColor3 = Color3.fromRGB(200, 200, 200),
+	        TextSize = 13,
+	        TextXAlignment = Enum.TextXAlignment.Left,
+	        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+	        AutomaticSize = Enum.AutomaticSize.Y,
+	        BackgroundTransparency = 1,
+	        Size = UDim2.fromScale(1, 1),
+	        Position = UDim2.fromOffset(10, 0),
+	        Name = "ButtonLabel",
+	        ThemeTag = { TextColor3 = "Text" },
+	    })
+	
+	    local Button = New("TextButton", {
+	        Size = UDim2.new(1, -5, 0, 32),
+	        BackgroundTransparency = 1,
+	        ZIndex = 23,
+	        Text = "",
+	        Parent = DropdownScrollFrame,
+	        Visible = false,
+	        ThemeTag = { BackgroundColor3 = "DropdownOption" },
+	    }, {
+	        ButtonSelector,
+	        ButtonLabel,
+	        New("UICorner", { CornerRadius = UDim.new(0, 6) }),
+	    })
+	
+	    return Button
+	end
+	
+	function Dropdown:CreateDropdownElement(Value, Index)
+	    local Button = table.remove(elementPool, 1) or self:CreateNewDropdownElement()
+	    Button.ButtonLabel.Text = Value
+	    Button.Visible = true
+	    Button.LayoutOrder = Index
+	    return Button
+	end
 	
 	function Dropdown:BuildDropdownList()
 	    local Values = Dropdown.Values
-	    local Buttons = {}
-	    local ActiveButtons = {}
 	    local ListSizeX = 0
 	
-	    -- Clear previous UI elements efficiently
-	    for _, Element in next, DropdownScrollFrame:GetChildren() do
-	        if not Element:IsA("UIListLayout") then
-		    task.wait()
-	            Element:Destroy() -- Destroy instead of hiding to free memory
-	        end
-	    end
-	
-	    -- Creates a dropdown button but doesn't add it to the UI immediately
-	    local function CreateDropdownElement(Value, Index)
-	        local Table = {}
-	
-	        local ButtonSelector = New("Frame", {
-	            Size = UDim2.fromOffset(4, 14),
-	            BackgroundColor3 = Color3.fromRGB(76, 194, 255),
-	            Position = UDim2.fromOffset(-1, 16),
-	            AnchorPoint = Vector2.new(0, 0.5),
-	            ThemeTag = { BackgroundColor3 = "Accent" },
-	        }, {
-	            New("UICorner", { CornerRadius = UDim.new(0, 2) }),
-	        })
-	
-	        local ButtonLabel = New("TextLabel", {
-	            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
-	            Text = Value,
-	            TextColor3 = Color3.fromRGB(200, 200, 200),
-	            TextSize = 13,
-	            TextXAlignment = Enum.TextXAlignment.Left,
-	            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-	            AutomaticSize = Enum.AutomaticSize.Y,
-	            BackgroundTransparency = 1,
-	            Size = UDim2.fromScale(1, 1),
-	            Position = UDim2.fromOffset(10, 0),
-	            Name = "ButtonLabel",
-	            ThemeTag = { TextColor3 = "Text" },
-	        })
-	
-	        local Button = New("TextButton", {
-	            Size = UDim2.new(1, -5, 0, 32),
-	            BackgroundTransparency = 1,
-	            ZIndex = 23,
-	            Text = "",
-	            Parent = DropdownScrollFrame,
-	            Visible = false, -- Start hidden
-	            ThemeTag = { BackgroundColor3 = "DropdownOption" },
-	        }, {
-	            ButtonSelector,
-	            ButtonLabel,
-	            New("UICorner", { CornerRadius = UDim.new(0, 6) }),
-	        })
-	
-	        local Selected = Config.Multi and Dropdown.Value[Value] or Dropdown.Value == Value
-	
-	        local BackMotor, SetBackTransparency = Creator.SpringMotor(1, Button, "BackgroundTransparency")
-	        local SelMotor, SetSelTransparency = Creator.SpringMotor(1, ButtonSelector, "BackgroundTransparency")
-	        local SelectorSizeMotor = Flipper.SingleMotor.new(6)
-	
-	        SelectorSizeMotor:onStep(function(value)
-	            ButtonSelector.Size = UDim2.new(0, 4, 0, value)
-	        end)
-	
-	        Creator.AddSignal(Button.MouseEnter, function()
-	            SetBackTransparency(Selected and 0.85 or 0.89)
-	        end)
-	        Creator.AddSignal(Button.MouseLeave, function()
-	            SetBackTransparency(Selected and 0.89 or 1)
-	        end)
-	        Creator.AddSignal(Button.MouseButton1Down, function()
-	            SetBackTransparency(0.92)
-	        end)
-	        Creator.AddSignal(Button.MouseButton1Up, function()
-	            SetBackTransparency(Selected and 0.85 or 0.89)
-	        end)
-	
-	        function Table:UpdateButton()
-	            Selected = Config.Multi and Dropdown.Value[Value] or Dropdown.Value == Value
-	            SetBackTransparency(Selected and 0.89 or 1)
-	            SelectorSizeMotor:setGoal(Flipper.Spring.new(Selected and 14 or 6, { frequency = 6 }))
-	            SetSelTransparency(Selected and 0 or 1)
-	        end
-	
-	        ButtonLabel.InputBegan:Connect(function(Input)
-	            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-	                local Try = not Selected
-	
-	                if Dropdown:GetActiveValues() == 1 and not Try and not Config.AllowNull then
-	                    return
-	                end
-	
-	                if Config.Multi then
-	                    Selected = Try
-	                    Dropdown.Value[Value] = Selected and true or nil
-	                else
-	                    Selected = Try
-	                    Dropdown.Value = Selected and Value or nil
-	
-	                    for _, OtherButton in next, Buttons do
-				task.wait()
-	                        OtherButton:UpdateButton()
-	                    end
-	                end
-	
-	                Table:UpdateButton()
-	                Dropdown:Display()
-	
-	                Library:SafeCallback(Dropdown.Callback, Dropdown.Value)
-	                Library:SafeCallback(Dropdown.Changed, Dropdown.Value)
+	    -- Clear previous elements using object pooling
+	    for _, element in ipairs(DropdownScrollFrame:GetChildren()) do
+	        if not element:IsA("UIListLayout") then
+	            if element.Name == "PooledElement" then
+	                element.Visible = false
+	                table.insert(elementPool, element)
+	            else
+	                element:Destroy()
 	            end
-	        end)
-	
-	        Table:UpdateButton()
-	        Dropdown:Display()
-	
-	        -- Update ListSizeX dynamically based on text width
-	        task.spawn(function()
-	            task.wait(0.01) -- Allow time for UI to update
-	            ListSizeX = math.max(ListSizeX, ButtonLabel.TextBounds.X + 30)
-	        end)
-	
-	        return Button
-	    end
-	
-	    -- Batch UI creation to avoid freezing
-	    local function CreateBatch(startIdx, endIdx)
-	        for Idx = startIdx, endIdx do
-		    task.wait()
-	            local Value = Values[Idx]
-	            if not Value then break end
-			
-	            local Button = CreateDropdownElement(Value, Idx)
-	            Buttons[Button] = Button
-	            task.wait(0.01) -- Slight delay to prevent lag spikes
 	        end
 	    end
 	
-	    -- Create elements in batches
+	    -- Batch create new elements
 	    local totalValues = #Values
 	    local batchSize = math.min(MAX_VISIBLE_DROPDOWNS, totalValues)
 	    for i = 1, totalValues, batchSize do
-		task.wait()
-	        task.spawn(CreateBatch, i, math.min(i + batchSize - 1, totalValues))
+	        local endIdx = math.min(i + batchSize - 1, totalValues)
+	        for j = i, endIdx do
+	            local Value = Values[j]
+	            local Button = self:CreateDropdownElement(Value, j)
+	            Button.Name = "PooledElement"
+	            Button.LayoutOrder = j
+	            ListSizeX = math.max(ListSizeX, Button.ButtonLabel.TextBounds.X + 30)
+	        end
+	        RunService.Heartbeat:Wait() -- Gentle yield
 	    end
 	
-	    -- Final size adjustments
-	    task.delay(0.5, function()
-	        RecalculateCanvasSize()
-	        RecalculateListSize()
-	    end)
+	    -- Immediate layout calculations
+	    DropdownScrollFrame.CanvasSize = UDim2.fromOffset(0, DropdownListLayout.AbsoluteContentSize.Y)
+	    DropdownHolderCanvas.Size = UDim2.fromOffset(
+	        ListSizeX,
+	        math.min(DropdownListLayout.AbsoluteContentSize.Y + 10, 392)
+	    )
 	end
 
 	function Dropdown:SetValues(NewValues)
